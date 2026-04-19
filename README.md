@@ -1,35 +1,15 @@
 # Openwrt_Project
-# 🔥 NT131 — Hệ Thống Tường Lửa OpenWRT
+# Xây dựng Soft-Router không dây sử dụng OpenWRT và triển khai cơ chế Firewall bảo vệ mạng WLAN
 
-> **Nhóm 18 · Lớp Q22 · Môn NT131 — Bảo mật mạng**
+> **Nhóm 18 - Lớp NT131.Q22**
 
 ---
 
-## 🗺️ Kiến trúc mạng
+## Kiến trúc mạng
 
-```
-┌─────────────────────────────────────────────────────┐
-│               VMware Workstation Pro                │
-│                                                     │
-│   ┌─────────────┐      ┌──────────────────────┐    │
-│   │  Ubuntu VM  │      │    OpenWRT Router     │    │
-│   │  (VMnet2)   │      │                       │    │
-│   │  LAN Client │◄────►│ eth1 · LAN  192.168.1.1/24 │    │
-│   └─────────────┘      │                       │    │
-│                        │ eth2 · GUEST 192.168.2.1/24 │    │
-│   ┌─────────────┐      │                       │    │
-│   │  Ubuntu VM  │      │ eth0 · WAN  (NAT)     │    │
-│   │  (VMnet3)   │◄────►│                       │    │
-│   │ GUEST Client│      └──────────────────────┘    │
-│   └─────────────┘               │ NAT               │
-│                                 ▼                   │
-│                        ┌──────────────┐            │
-│                        │   Internet   │            │
-│                        └──────────────┘            │
-└─────────────────────────────────────────────────────┘
-```
+![Network Topology](docs/topology1.png)
 
-## 🛡️ Các zone firewall
+## Các zone firewall
 
 | Zone  | Interface | Network        | Input  | Forward | Output |
 |-------|-----------|----------------|--------|---------|--------|
@@ -37,18 +17,18 @@
 | LAN   | eth1      | 192.168.1.0/24 | ACCEPT | ACCEPT  | ACCEPT |
 | GUEST | eth2      | 192.168.2.0/24 | REJECT | REJECT  | ACCEPT |
 
-### 📋 Custom Rules
+### Custom Rules
 
-| Rule               | Hướng      | Port | Action |
-|--------------------|------------|------|--------|
-| Block-WAN-SSH      | WAN→Router | 22   | DROP   |
-| Block-WAN-HTTP     | WAN→Router | 80   | DROP   |
-| Block-GUEST-to-LAN | GUEST→LAN  | any  | DROP   |
-| GUEST→WAN Forward  | GUEST→WAN  | any  | ACCEPT |
+| Rule               | Hướng       | Port | Action |
+|--------------------|-------------|------|--------|
+| Block-WAN-SSH      | WAN🠖Router | 22   | DROP   |
+| Block-WAN-HTTP     | WAN🠖Router | 80   | DROP   |
+| Block-GUEST-to-LAN | GUEST🠖LAN  | any  | DROP   |
+| GUEST🠖WAN Forward | GUEST🠖WAN  | any  | ACCEPT |
 
 ---
 
-## 📁 Cấu trúc project
+## Cấu trúc project
 
 ```
 NT131-Firewall-OpenWRT/
@@ -68,7 +48,7 @@ NT131-Firewall-OpenWRT/
 
 ---
 
-## 🛠️ Môi trường & công cụ
+## Môi trường & công cụ
 
 | Thành phần      | Phiên bản / Chi tiết       |
 |-----------------|---------------------------|
@@ -81,17 +61,7 @@ NT131-Firewall-OpenWRT/
 
 ---
 
-## 👥 Phân công nhóm
-
-| Thành viên           | Nhiệm vụ                              |
-|----------------------|---------------------------------------|
-| Thành viên 1 (Duy)   | Hạ tầng VM, cấu hình fw4, zones & rules |
-| Thành viên 2         | Tài liệu, custom rules fw4            |
-| Thành viên 3         | Kiểm thử nmap, logging                |
-
----
-
-## 🚀 Hướng dẫn nhanh
+## Hướng dẫn nhanh
 
 ### Cài đặt môi trường
 > Xem chi tiết tại [`docs/Setup.md`](docs/Setup.md)
