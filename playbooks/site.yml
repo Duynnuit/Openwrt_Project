@@ -1,0 +1,35 @@
+---
+# ============================================================
+# playbooks/site.yml - Master playbook chạy toàn bộ kiểm thử
+# NT131.Q22 - Nhóm 18 | OpenWRT Firewall Test Suite
+# ============================================================
+
+- name: "🔧 Setup - Chuẩn bị môi trường kiểm thử"
+  import_playbook: 00_setup.yml
+
+- name: "📡 Test 1 - Kiểm tra router hoạt động & định tuyến cơ bản"
+  import_playbook: 01_test_router_health.yml
+
+- name: "🌐 Test 2 - Kiểm tra kết nối Internet từ LAN"
+  import_playbook: 02_test_lan_internet.yml
+
+- name: "👥 Test 3 - Kiểm tra kết nối Internet từ GUEST"
+  import_playbook: 03_test_guest_internet.yml
+
+- name: "🔒 Test 4 - Kiểm tra cách ly GUEST ↛ LAN"
+  import_playbook: 04_test_guest_lan_isolation.yml
+
+- name: "🛡️ Test 5 - Kiểm tra bảo vệ cổng quản trị từ WAN"
+  import_playbook: 05_test_wan_admin_block.yml
+
+- name: "🛡️ Test 6 - Kiểm tra bảo vệ cổng quản trị từ GUEST"
+  import_playbook: 06_test_guest_admin_block.yml
+
+- name: "🔍 Test 7 - Quét cổng bằng nmap từ WAN"
+  import_playbook: 07_test_nmap_wan.yml
+
+- name: "🔍 Test 8 - Quét cổng bằng nmap từ GUEST"
+  import_playbook: 08_test_nmap_guest.yml
+
+- name: "📊 Report - Tổng hợp kết quả kiểm thử"
+  import_playbook: 99_generate_report.yml

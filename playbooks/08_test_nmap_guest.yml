@@ -1,0 +1,113 @@
+---
+# ============================================================
+# playbooks/08_test_nmap_guest.yml
+# Quét cổng từ GUEST vào LAN và Router
+# Mô phỏng thiết bị GUEST bị xâm chiếm cố tấn công LAN
+# Kết quả mong đợi: Không thấy gì từ LAN zone
+# ============================================================
+
+- name: "TEST 8 - Nmap Scan từ GUEST vào LAN (Mô phỏng lateral movement)"
+  hosts: guest_hosts
+  gather_facts: yes
+  become: yes
+
+  tasks:
+    - name: "[T8.1] Nmap scan từ GUEST vào 192.168.1.0/24 (toàn bộ LAN subnet)"
+      command: >
+        nmap -n -sn -T4
+        --host-timeout 10s
+        192.168.1.0/24
+        -oN {{ results_dir }}/nmap_guest_lan_discovery.txt
+      register: nmap_lan_discovery
+      ignore_errors: yes
+
+    - name: "[T8.2] Nmap port scan GUEST → Router LAN IP"
+      command: >
+        nmap -n -sS -T4
+        --top-ports 100
+        --host-timeout 15s
+        -oN {{ results_dir }}/nmap_guest_router_lan.txt
+        192.168.1.1
+      register: nmap_guest_router
+      ignore_errors: yes
+
+    - name: "[T8.3] Nmap với --reason để xác nhận DROP (không phải filtered từ timeout)"
+      command: >
+        nmap -n --reason -T3
+        -p 22,80,443,8080
+        192.168.1.1
+      register: nmap_reason_guest
+      ignore_errors: yes
+
+    - name: "[T8.4] Nmap scan toàn bộ LAN từ GUEST (phát hiện host nào visible không)"
+      command: >
+        nmap -n -sV -T3
+        -p 22,80,443,3389,8080
+        --host-timeout 20s
+        -oN {{ results_dir }}/nmap_guest_lan_portscan.txt
+        192.168.1.0/24
+      register: nmap_full_lan
+      ignore_errors: yes
+
+    - name: "Phân tích - Kiểm tra GUEST có thấy host trong LAN không"
+      set_fact:
+        lan_hosts_visible: "{{ nmap_lan_discovery.stdout | default('') | regex_search('Host is up') is not none }}"
+        lan_ports_open: "{{ 'open' in nmap_guest_router.stdout | default('') }}"
+
+    - name: "ASSERT - GUEST không discover được host nào trong LAN"
+      assert:
+        that:
+          - not lan_hosts_visible
+        fail_msg: |
+          ❌ SECURITY FAIL T8.1: GUEST discover được host trong LAN subnet!
+          Firewall chưa block GUEST→LAN hoàn toàn.
+        success_msg: "✅ PASS T8.1: GUEST không thấy host nào trong LAN"
+
+    - name: "ASSERT - GUEST không thấy port nào open trên router LAN"
+      assert:
+        that:
+          - not lan_ports_open
+        fail_msg: |
+          ❌ SECURITY FAIL T8.2: GUEST thấy open port trên router LAN IP!
+        success_msg: "✅ PASS T8.2: Không có port nào open từ GUEST→LAN router"
+
+    - name: "Lưu kết quả T8"
+      copy:
+        content: |
+          ========================================
+          TEST 8: Nmap Scan từ GUEST → LAN
+          Attacker: GUEST {{ ansible_default_ipv4.address }}
+          Mục tiêu: LAN subnet 192.168.1.0/24
+          ========================================
+
+          Kịch bản: Thiết bị GUEST bị compromise cố scan LAN
+          Mong đợi: Firewall block hoàn toàn, GUEST không thấy gì
+
+          [T8.1] Host Discovery (ping scan) GUEST → 192.168.1.0/24:
+          {{ nmap_lan_discovery.stdout | default('N/A') }}
+          Kết quả: {{ 'KHÔNG THẤY HOST NÀO ✅' if not lan_hosts_visible else 'THẤY HOST ❌ (Lỗ hổng!)' }}
+
+          [T8.2] Port Scan GUEST → 192.168.1.1 (Top 100 ports):
+          {{ nmap_guest_router.stdout | default('N/A') }}
+          Kết quả: {{ 'KHÔNG CÓ OPEN PORT ✅' if not lan_ports_open else 'CÓ OPEN PORT ❌' }}
+
+          [T8.3] Reason Analysis:
+          {{ nmap_reason_guest.stdout | default('N/A') }}
+
+          [T8.4] Full scan LAN subnet:
+          {{ nmap_full_lan.stdout | default('N/A') }}
+
+          ========================================
+          KẾT LUẬN BẢO MẬT:
+          GUEST lateral movement: {{ 'KHÔNG THỂ ✅ (Firewall hoạt động tốt)' if (not lan_hosts_visible and not lan_ports_open) else 'CÓ THỂ ❌ (Cần vá firewall ngay!)' }}
+          ========================================
+        dest: "{{ results_dir }}/08_nmap_guest_summary.txt"
+
+    - name: "Tóm tắt T8"
+      debug:
+        msg: |
+          ===== TEST 8: Nmap từ GUEST → LAN =====
+          🔍 Host visible trong LAN: {{ '✅ KHÔNG AI (OK)' if not lan_hosts_visible else '❌ CÓ HOST (Fail!)' }}
+          🔍 Ports open trên LAN:    {{ '✅ KHÔNG CÓ (OK)' if not lan_ports_open else '❌ CÓ (Fail!)' }}
+          📁 Reports: {{ results_dir }}/nmap_guest_*.txt
+          📌 Mong đợi: GUEST thấy tất cả filtered = Firewall OK

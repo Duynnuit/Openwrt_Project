@@ -1,0 +1,73 @@
+---
+# ============================================================
+# playbooks/03_test_guest_internet.yml
+# GUEST phải được phép ra Internet (ACCEPT forward GUEST→WAN)
+# Kết quả mong đợi: PASS
+# ============================================================
+
+- name: "TEST 3 - GUEST Internet Access via NAT"
+  hosts: guest_hosts
+  gather_facts: yes
+
+  tasks:
+    - name: "[T3.1] Ping 8.8.8.8 từ GUEST"
+      command: ping -c 4 -W 3 8.8.8.8
+      register: ping_dns
+      ignore_errors: yes
+
+    - name: "[T3.2] Ping 1.1.1.1 từ GUEST"
+      command: ping -c 4 -W 3 1.1.1.1
+      register: ping_cf
+      ignore_errors: yes
+
+    - name: "[T3.3] HTTP GET từ GUEST"
+      command: curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 http://example.com
+      register: http_guest
+      ignore_errors: yes
+
+    - name: "[T3.4] Traceroute từ GUEST (xác nhận qua router 192.168.2.1)"
+      command: traceroute -n -m 5 8.8.8.8
+      register: trace_guest
+      ignore_errors: yes
+
+    - name: "ASSERT - GUEST phải ping được Internet"
+      assert:
+        that:
+          - ping_dns.rc == 0
+        fail_msg: "❌ FAIL T3.1: GUEST không ra được Internet - kiểm tra GUEST→WAN forward rule"
+        success_msg: "✅ PASS T3.1: GUEST ping được Internet"
+
+    - name: "ASSERT - GUEST phải HTTP được Internet"
+      assert:
+        that:
+          - http_guest.stdout == "200"
+        fail_msg: "❌ FAIL T3.3: GUEST không HTTP được ra Internet"
+        success_msg: "✅ PASS T3.3: GUEST HTTP OK"
+      when: http_guest.rc is defined
+
+    - name: "Lưu kết quả T3"
+      copy:
+        content: |
+          ========================================
+          TEST 3: GUEST Internet Access (NAT Forward)
+          Host: {{ inventory_hostname }} - {{ ansible_default_ipv4.address }}
+          ========================================
+
+          [T3.1] Ping 8.8.8.8:   {{ 'PASS ✅' if ping_dns.rc == 0 else 'FAIL ❌' }}
+          [T3.2] Ping 1.1.1.1:   {{ 'PASS ✅' if ping_cf.rc == 0 else 'FAIL ❌' }}
+          [T3.3] HTTP 200:        {{ 'PASS ✅' if http_guest.stdout == '200' else 'FAIL ❌' }}
+
+          [T3.4] Traceroute:
+          {{ trace_guest.stdout | default('N/A') }}
+
+          KẾT LUẬN: GUEST→Internet = {{ 'OK ✅ (Đúng thiết kế)' if ping_dns.rc == 0 else 'FAIL ❌' }}
+        dest: "{{ results_dir }}/03_guest_internet.txt"
+
+    - name: "Hiển thị tóm tắt T3"
+      debug:
+        msg: |
+          ===== TEST 3: GUEST → Internet =====
+          🌐 Ping 8.8.8.8:  {{ '✅ PASS' if ping_dns.rc == 0 else '❌ FAIL' }}
+          🌐 Ping 1.1.1.1:  {{ '✅ PASS' if ping_cf.rc == 0 else '❌ FAIL' }}
+          🌐 HTTP 200:       {{ '✅ PASS' if http_guest.stdout == '200' else '❌ FAIL' }}
+          📌 Kết quả mong đợi: PASS (GUEST được phép ra Internet)

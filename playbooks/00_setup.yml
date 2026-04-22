@@ -1,0 +1,85 @@
+---
+# ============================================================
+# playbooks/00_setup.yml - Cài đặt công cụ cần thiết trên các host test
+# ============================================================
+
+- name: "Setup - Cài đặt công cụ kiểm thử trên LAN hosts"
+  hosts: lan_hosts
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Cập nhật apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      ignore_errors: yes
+
+    - name: Cài đặt công cụ kiểm thử
+      apt:
+        name:
+          - nmap
+          - curl
+          - wget
+          - netcat-openbsd
+          - iputils-ping
+          - traceroute
+          - tcpdump
+          - dnsutils
+        state: present
+      ignore_errors: yes
+
+    - name: Tạo thư mục kết quả test
+      file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: '0755'
+
+- name: "Setup - Cài đặt công cụ kiểm thử trên GUEST hosts"
+  hosts: guest_hosts
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Cập nhật apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      ignore_errors: yes
+
+    - name: Cài đặt công cụ kiểm thử
+      apt:
+        name:
+          - nmap
+          - curl
+          - wget
+          - netcat-openbsd
+          - iputils-ping
+          - traceroute
+        state: present
+      ignore_errors: yes
+
+    - name: Tạo thư mục kết quả test
+      file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: '0755'
+
+- name: "Setup - Kiểm tra công cụ trên WAN hosts"
+  hosts: wan_hosts
+  become: yes
+  gather_facts: yes
+  ignore_unreachable: yes
+  tasks:
+    - name: Cài đặt công cụ tấn công mô phỏng
+      apt:
+        name:
+          - nmap
+          - curl
+          - netcat-openbsd
+        state: present
+      ignore_errors: yes
+
+    - name: Tạo thư mục kết quả test
+      file:
+        path: "{{ results_dir }}"
+        state: directory
+        mode: '0755'

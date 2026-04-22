@@ -1,0 +1,122 @@
+---
+# ============================================================
+# playbooks/07_test_nmap_wan.yml
+# Quét cổng bằng nmap từ phía WAN vào router và mạng nội bộ
+# Mô phỏng attacker từ ngoài Internet
+# Kết quả mong đợi: Router không expose port nào từ WAN
+# ============================================================
+
+- name: "TEST 7 - Nmap Scan từ WAN (Mô phỏng attacker ngoài Internet)"
+  hosts: wan_hosts
+  gather_facts: yes
+  ignore_unreachable: yes
+
+  vars:
+    router_wan_ip: "10.0.0.1"          # Thay IP WAN thực của router
+
+  tasks:
+    - name: "[T7.1] Nmap SYN scan - Top 1000 ports trên router WAN IP"
+      command: >
+        nmap -n -sS -T4 --top-ports 1000
+        --host-timeout 60s
+        -oN {{ results_dir }}/nmap_wan_syn_scan.txt
+        {{ router_wan_ip }}
+      register: nmap_syn
+      ignore_errors: yes
+      become: yes
+
+    - name: "[T7.2] Nmap version detection - Các cổng phổ biến"
+      command: >
+        nmap -n -sV -T4
+        -p 22,23,25,53,80,443,8080,8443,8888
+        --host-timeout 30s
+        -oN {{ results_dir }}/nmap_wan_version.txt
+        {{ router_wan_ip }}
+      register: nmap_version
+      ignore_errors: yes
+      become: yes
+
+    - name: "[T7.3] Nmap UDP scan - Các cổng UDP quan trọng (DNS, SNMP)"
+      command: >
+        nmap -n -sU -T4
+        -p 53,67,68,161,500
+        --host-timeout 30s
+        -oN {{ results_dir }}/nmap_wan_udp.txt
+        {{ router_wan_ip }}
+      register: nmap_udp
+      ignore_errors: yes
+      become: yes
+
+    - name: "[T7.4] Nmap firewall probe - Kiểm tra DROP vs REJECT"
+      command: >
+        nmap -n --reason -T3
+        -p 22,80,443
+        {{ router_wan_ip }}
+      register: nmap_reason
+      ignore_errors: yes
+      become: yes
+
+    - name: "[T7.5] Nmap OS Detection từ WAN"
+      command: >
+        nmap -n -O --osscan-guess
+        -T4 {{ router_wan_ip }}
+        --host-timeout 30s
+      register: nmap_os
+      ignore_errors: yes
+      become: yes
+
+    - name: "Phân tích kết quả - Kiểm tra open ports"
+      set_fact:
+        has_open_ports: "{{ 'open' in nmap_syn.stdout | default('') }}"
+
+    - name: "ASSERT - WAN không thấy port nào open"
+      assert:
+        that:
+          - not has_open_ports
+        fail_msg: |
+          ❌ SECURITY WARN T7.1: Nmap thấy có cổng OPEN từ WAN!
+          Kiểm tra lại firewall WAN INPUT rules.
+          Output: {{ nmap_syn.stdout | default('N/A') }}
+        success_msg: "✅ PASS T7.1: Không có cổng nào open từ WAN"
+
+    - name: "Lưu kết quả T7 (summary)"
+      copy:
+        content: |
+          ========================================
+          TEST 7: Nmap Scan từ WAN
+          Attacker IP: {{ ansible_default_ipv4.address }}
+          Đích: Router WAN {{ router_wan_ip }}
+          ========================================
+
+          MỤC TIÊU: Router KHÔNG được expose bất kỳ port nào từ WAN
+          (WAN zone INPUT policy = DROP)
+
+          [T7.1] SYN Scan Top 1000 Ports:
+          {{ nmap_syn.stdout | default('N/A') }}
+
+          [T7.2] Version Detection (22,23,80,443,8080):
+          {{ nmap_version.stdout | default('N/A') }}
+
+          [T7.3] UDP Scan:
+          {{ nmap_udp.stdout | default('N/A') }}
+
+          [T7.4] Firewall Reason (DROP/REJECT detection):
+          {{ nmap_reason.stdout | default('N/A') }}
+
+          [T7.5] OS Detection:
+          {{ nmap_os.stdout | default('N/A') }}
+
+          ========================================
+          KẾT LUẬN:
+          Open Ports từ WAN: {{ 'KHÔNG CÓ ✅ (An toàn)' if not has_open_ports else 'CÓ ❌ (Cần kiểm tra!)' }}
+          ========================================
+          Lưu ý: Kết quả filtered/closed là ĐÚNG, open là SAI
+        dest: "{{ results_dir }}/07_nmap_wan_summary.txt"
+
+    - name: "Tóm tắt T7"
+      debug:
+        msg: |
+          ===== TEST 7: Nmap từ WAN =====
+          🔍 Open ports từ WAN: {{ '✅ KHÔNG CÓ (An toàn)' if not has_open_ports else '❌ CÓ (Kiểm tra lại!)' }}
+          📁 Chi tiết: {{ results_dir }}/nmap_wan_*.txt
+          📌 Kết quả mong đợi: Tất cả ports = filtered hoặc closed

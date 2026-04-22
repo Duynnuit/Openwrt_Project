@@ -1,0 +1,128 @@
+---
+# ============================================================
+# playbooks/04_test_guest_lan_isolation.yml
+# *** TEST QUAN TRỌNG NHẤT ***
+# GUEST không được phép truy cập LAN (Block-GUEST-to-LAN rule)
+# Kết quả mong đợi: TẤT CẢ phải FAIL/BLOCKED = PASS
+# ============================================================
+
+- name: "TEST 4 - GUEST ↛ LAN Isolation (Cách ly mạng)"
+  hosts: guest_hosts
+  gather_facts: yes
+
+  vars:
+    lan_router_ip: "192.168.1.1"
+    # Thêm IP của các thiết bị LAN thực tế vào đây
+    lan_devices:
+      - "192.168.1.100"
+      - "192.168.1.101"
+
+  tasks:
+    - name: "[T4.1] GUEST ping router LAN IP (192.168.1.1) - PHẢI BỊ BLOCK"
+      command: ping -c 3 -W 2 192.168.1.1
+      register: ping_lan_router
+      ignore_errors: yes
+      failed_when: false   # Không fail playbook, ta tự kiểm tra
+
+    - name: "ASSERT - GUEST KHÔNG được ping 192.168.1.1 (router LAN)"
+      assert:
+        that:
+          - ping_lan_router.rc != 0
+        fail_msg: |
+          ❌ SECURITY FAIL T4.1: GUEST ping được router LAN IP 192.168.1.1!
+          Rule 'Block-GUEST-to-LAN' CHƯA HOẠT ĐỘNG!
+          Cần kiểm tra lại cấu hình firewall.
+        success_msg: "✅ PASS T4.1: GUEST KHÔNG ping được 192.168.1.1 (bị block đúng)"
+
+    - name: "[T4.2] GUEST thử SSH vào LAN router (port 22) - PHẢI BỊ BLOCK"
+      command: nc -zv -w 3 192.168.1.1 22
+      register: ssh_lan_attempt
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - GUEST KHÔNG được SSH vào LAN"
+      assert:
+        that:
+          - ssh_lan_attempt.rc != 0
+        fail_msg: "❌ SECURITY FAIL T4.2: GUEST kết nối được SSH vào LAN router!"
+        success_msg: "✅ PASS T4.2: SSH từ GUEST vào LAN bị block"
+
+    - name: "[T4.3] GUEST thử HTTP vào LAN router (port 80) - PHẢI BỊ BLOCK"
+      command: curl -s --connect-timeout 3 http://192.168.1.1
+      register: http_lan_attempt
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - GUEST KHÔNG được HTTP vào LAN router"
+      assert:
+        that:
+          - http_lan_attempt.rc != 0
+        fail_msg: "❌ SECURITY FAIL T4.3: GUEST truy cập được LuCI (HTTP) trên LAN!"
+        success_msg: "✅ PASS T4.3: HTTP từ GUEST vào LAN bị block"
+
+    - name: "[T4.4] GUEST ping thiết bị LAN (192.168.1.100) - PHẢI BỊ BLOCK"
+      command: ping -c 3 -W 2 "{{ item }}"
+      register: ping_lan_device
+      ignore_errors: yes
+      failed_when: false
+      loop: "{{ lan_devices }}"
+
+    - name: "ASSERT - GUEST không ping được thiết bị LAN"
+      assert:
+        that:
+          - item.rc != 0
+        fail_msg: "❌ SECURITY FAIL T4.4: GUEST ping được thiết bị LAN {{ item.item }}!"
+        success_msg: "✅ PASS T4.4: GUEST không ping được {{ item.item }}"
+      loop: "{{ ping_lan_device.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "[T4.5] GUEST thử scan port LAN bằng nmap - PHẢI BỊ BLOCK"
+      command: nmap -n --open -T3 -p 22,80,443 192.168.1.1 --host-timeout 5s
+      register: nmap_lan_from_guest
+      ignore_errors: yes
+
+    - name: "Kiểm tra nmap từ GUEST vào LAN"
+      debug:
+        msg: |
+          🔍 Kết quả nmap từ GUEST → LAN:
+          {{ nmap_lan_from_guest.stdout | default('N/A') }}
+          📌 Mong đợi: Không có cổng nào open (tất cả filtered/closed)
+
+    - name: "Lưu kết quả T4"
+      copy:
+        content: |
+          ========================================
+          TEST 4: GUEST ↛ LAN Isolation (CÁch LY MẠNG)
+          *** ĐÂY LÀ TEST BẢO MẬT QUAN TRỌNG NHẤT ***
+          Host GUEST: {{ inventory_hostname }} - {{ ansible_default_ipv4.address }}
+          ========================================
+
+          Nguyên tắc: Block-GUEST-to-LAN rule phải block TẤT CẢ traffic GUEST→LAN
+
+          [T4.1] GUEST ping 192.168.1.1 (router LAN):
+                 → Kết quả: {{ 'BỊ BLOCK ✅ (Đúng)' if ping_lan_router.rc != 0 else 'THÔNG ❌ (Sai - Lỗ hổng bảo mật!)' }}
+
+          [T4.2] GUEST → SSH port 22 trên LAN:
+                 → Kết quả: {{ 'BỊ BLOCK ✅ (Đúng)' if ssh_lan_attempt.rc != 0 else 'THÔNG ❌ (Sai - Lỗ hổng bảo mật!)' }}
+
+          [T4.3] GUEST → HTTP port 80 trên LAN:
+                 → Kết quả: {{ 'BỊ BLOCK ✅ (Đúng)' if http_lan_attempt.rc != 0 else 'THÔNG ❌ (Sai - Lỗ hổng bảo mật!)' }}
+
+          [T4.5] Nmap scan từ GUEST → 192.168.1.1:
+          {{ nmap_lan_from_guest.stdout | default('N/A') }}
+
+          ========================================
+          KẾT LUẬN BẢO MẬT:
+          GUEST→LAN isolation = {{ 'ĐẠT ✅' if (ping_lan_router.rc != 0 and ssh_lan_attempt.rc != 0) else 'KHÔNG ĐẠT ❌ - CẦN XEM LẠI FIREWALL' }}
+          ========================================
+        dest: "{{ results_dir }}/04_guest_lan_isolation.txt"
+
+    - name: "Hiển thị tóm tắt T4"
+      debug:
+        msg: |
+          ===== TEST 4: GUEST ↛ LAN Isolation =====
+          🔒 Ping LAN router:  {{ '✅ BLOCKED (OK)' if ping_lan_router.rc != 0 else '❌ THÔNG (Security Fail!)' }}
+          🔒 SSH vào LAN:      {{ '✅ BLOCKED (OK)' if ssh_lan_attempt.rc != 0 else '❌ THÔNG (Security Fail!)' }}
+          🔒 HTTP vào LAN:     {{ '✅ BLOCKED (OK)' if http_lan_attempt.rc != 0 else '❌ THÔNG (Security Fail!)' }}
+          📌 Kết quả mong đợi: Tất cả BLOCKED = PASS

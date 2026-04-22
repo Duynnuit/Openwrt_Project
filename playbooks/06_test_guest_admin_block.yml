@@ -1,0 +1,90 @@
+---
+# ============================================================
+# playbooks/06_test_guest_admin_block.yml
+# GUEST không được truy cập SSH/HTTP vào router GUEST IP (192.168.2.1)
+# Kết quả mong đợi: SSH và HTTP từ GUEST vào router bị block
+# ============================================================
+
+- name: "TEST 6 - GUEST Admin Port Protection (Block GUEST → Router Management)"
+  hosts: guest_hosts
+  gather_facts: yes
+
+  tasks:
+    - name: "[T6.1] GUEST thử SSH vào router qua GUEST IP (192.168.2.1:22) - PHẢI BỊ BLOCK"
+      command: nc -zv -w 5 192.168.2.1 22
+      register: ssh_guest_router
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - GUEST không được SSH vào router"
+      assert:
+        that:
+          - ssh_guest_router.rc != 0
+        fail_msg: |
+          ❌ SECURITY FAIL T6.1: GUEST SSH được vào router (192.168.2.1:22)!
+          Cần thêm rule INPUT drop SSH từ GUEST zone.
+        success_msg: "✅ PASS T6.1: GUEST không SSH được vào router"
+
+    - name: "[T6.2] GUEST thử HTTP vào router qua GUEST IP (192.168.2.1:80) - PHẢI BỊ BLOCK"
+      command: curl -s --connect-timeout 5 http://192.168.2.1
+      register: http_guest_router
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - GUEST không được HTTP vào router"
+      assert:
+        that:
+          - http_guest_router.rc != 0
+        fail_msg: |
+          ❌ SECURITY FAIL T6.2: GUEST truy cập được LuCI qua GUEST IP!
+          Cần thêm rule INPUT drop HTTP từ GUEST zone.
+        success_msg: "✅ PASS T6.2: GUEST không HTTP được vào router"
+
+    - name: "[T6.3] GUEST ping router GUEST IP (192.168.2.1)"
+      command: ping -c 3 -W 2 192.168.2.1
+      register: ping_guest_router
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "Ghi nhận ping kết quả (policy có thể REJECT ping)"
+      debug:
+        msg: |
+          [T6.3] GUEST ping 192.168.2.1: {{ 'THÀNH CÔNG' if ping_guest_router.rc == 0 else 'BỊ BLOCK' }}
+          📌 Lưu ý: Tùy policy GUEST INPUT (REJECT), ping có thể bị block
+
+    - name: "[T6.4] GUEST nmap scan router GUEST interface"
+      command: nmap -n -sV -T4 -p 22,80,443 192.168.2.1 --host-timeout 15s
+      register: nmap_guest_router
+      ignore_errors: yes
+
+    - name: "Lưu kết quả T6"
+      copy:
+        content: |
+          ========================================
+          TEST 6: GUEST Admin Port Protection
+          Host: {{ inventory_hostname }} ({{ ansible_default_ipv4.address }})
+          Đích: Router GUEST IP = 192.168.2.1
+          ========================================
+
+          [T6.1] SSH (22) GUEST → Router (192.168.2.1):
+                 → {{ 'BLOCKED ✅ (Đúng)' if ssh_guest_router.rc != 0 else 'OPEN ❌ (Lỗ hổng!)' }}
+
+          [T6.2] HTTP (80) GUEST → Router (192.168.2.1):
+                 → {{ 'BLOCKED ✅ (Đúng)' if http_guest_router.rc != 0 else 'OPEN ❌ (Lỗ hổng!)' }}
+
+          [T6.3] Ping GUEST → Router (192.168.2.1):
+                 → {{ 'PASS' if ping_guest_router.rc == 0 else 'BLOCKED' }}
+                 (Tùy policy GUEST INPUT)
+
+          [T6.4] Nmap từ GUEST:
+          {{ nmap_guest_router.stdout | default('N/A') }}
+
+          KẾT LUẬN: GUEST Admin Protection = {{ 'ĐẠT ✅' if (ssh_guest_router.rc != 0 and http_guest_router.rc != 0) else 'KHÔNG ĐẠT ❌' }}
+        dest: "{{ results_dir }}/06_guest_admin_block.txt"
+
+    - name: "Tóm tắt T6"
+      debug:
+        msg: |
+          ===== TEST 6: GUEST → Router Admin =====
+          🛡️ SSH (22):  {{ '✅ BLOCKED' if ssh_guest_router.rc != 0 else '❌ OPEN' }}
+          🛡️ HTTP (80): {{ '✅ BLOCKED' if http_guest_router.rc != 0 else '❌ OPEN' }}

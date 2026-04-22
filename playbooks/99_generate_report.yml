@@ -1,0 +1,119 @@
+---
+# ============================================================
+# playbooks/99_generate_report.yml
+# Tổng hợp tất cả kết quả thành báo cáo cuối cùng
+# ============================================================
+
+- name: "REPORT - Thu thập kết quả từ tất cả hosts"
+  hosts: lan_hosts:guest_hosts
+  gather_facts: yes
+  tasks:
+    - name: "Fetch kết quả test từ LAN/GUEST hosts về controller"
+      fetch:
+        src: "{{ results_dir }}/{{ item }}"
+        dest: "/tmp/ansible-collected-results/{{ inventory_hostname }}/"
+        flat: yes
+      with_fileglob:
+        - "{{ results_dir }}/*.txt"
+      ignore_errors: yes
+
+- name: "REPORT - Tạo báo cáo tổng hợp trên Ansible Controller"
+  hosts: localhost
+  gather_facts: yes
+
+  tasks:
+    - name: "Tạo thư mục kết quả tổng hợp"
+      file:
+        path: "./test-results"
+        state: directory
+
+    - name: "Tạo báo cáo HTML tổng hợp"
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html lang="vi">
+          <head>
+            <meta charset="UTF-8">
+            <title>OpenWRT Firewall Test Report - Nhóm 18 NT131.Q22</title>
+            <style>
+              body { font-family: 'Segoe UI', monospace; background: #1a1a2e; color: #eee; margin: 0; padding: 20px; }
+              h1 { color: #00d4ff; border-bottom: 2px solid #00d4ff; }
+              h2 { color: #ff6b6b; }
+              .pass { color: #2ecc71; font-weight: bold; }
+              .fail { color: #e74c3c; font-weight: bold; }
+              .warn { color: #f39c12; }
+              .test-card { background: #16213e; border-left: 4px solid #00d4ff; margin: 15px 0; padding: 15px; border-radius: 4px; }
+              .security-critical { border-left-color: #e74c3c; }
+              table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+              th { background: #0f3460; padding: 8px; text-align: left; }
+              td { padding: 8px; border-bottom: 1px solid #333; }
+              .badge-pass { background: #27ae60; padding: 2px 8px; border-radius: 12px; font-size: 0.85em; }
+              .badge-fail { background: #e74c3c; padding: 2px 8px; border-radius: 12px; font-size: 0.85em; }
+              pre { background: #0a0a0a; padding: 10px; overflow-x: auto; font-size: 0.85em; }
+            </style>
+          </head>
+          <body>
+            <h1>🔥 OpenWRT Firewall Test Report</h1>
+            <p><strong>Nhóm 18 - NT131.Q22</strong> | Ngày kiểm thử: {{ ansible_date_time.date }}</p>
+
+            <div class="test-card">
+              <h2>📋 Tổng quan Kiến trúc Mạng</h2>
+              <table>
+                <tr><th>Zone</th><th>Interface</th><th>Network</th><th>Input</th><th>Forward</th><th>Output</th></tr>
+                <tr><td>WAN</td><td>eth0</td><td>NAT (Internet)</td><td class="fail">DROP</td><td class="fail">DROP</td><td class="pass">ACCEPT</td></tr>
+                <tr><td>LAN</td><td>eth1</td><td>192.168.1.0/24</td><td class="pass">ACCEPT</td><td class="pass">ACCEPT</td><td class="pass">ACCEPT</td></tr>
+                <tr><td>GUEST</td><td>eth2</td><td>192.168.2.0/24</td><td class="fail">REJECT</td><td class="fail">REJECT</td><td class="pass">ACCEPT</td></tr>
+              </table>
+            </div>
+
+            <div class="test-card">
+              <h2>🔒 Custom Firewall Rules</h2>
+              <table>
+                <tr><th>Rule</th><th>Hướng</th><th>Port</th><th>Action</th></tr>
+                <tr><td>Block-WAN-SSH</td><td>WAN → Router</td><td>22</td><td class="fail">DROP</td></tr>
+                <tr><td>Block-WAN-HTTP</td><td>WAN → Router</td><td>80</td><td class="fail">DROP</td></tr>
+                <tr><td>Block-GUEST-to-LAN</td><td>GUEST → LAN</td><td>any</td><td class="fail">DROP</td></tr>
+                <tr><td>GUEST→WAN Forward</td><td>GUEST → WAN</td><td>any</td><td class="pass">ACCEPT</td></tr>
+              </table>
+            </div>
+
+            <div class="test-card">
+              <h2>📊 Kết quả Kiểm thử (Chạy Ansible để xem chi tiết)</h2>
+              <table>
+                <tr><th>#</th><th>Test Case</th><th>Mong đợi</th><th>Playbook</th></tr>
+                <tr><td>T1</td><td>Router Health & DHCP</td><td class="pass">PASS</td><td>01_test_router_health.yml</td></tr>
+                <tr><td>T2</td><td>LAN → Internet (NAT)</td><td class="pass">PASS</td><td>02_test_lan_internet.yml</td></tr>
+                <tr><td>T3</td><td>GUEST → Internet (NAT Forward)</td><td class="pass">PASS</td><td>03_test_guest_internet.yml</td></tr>
+                <tr><td>T4 ⚠️</td><td>GUEST ↛ LAN (Cách ly)</td><td class="fail">BLOCKED</td><td>04_test_guest_lan_isolation.yml</td></tr>
+                <tr><td>T5 ⚠️</td><td>WAN ↛ Router SSH/HTTP</td><td class="fail">BLOCKED</td><td>05_test_wan_admin_block.yml</td></tr>
+                <tr><td>T6</td><td>GUEST ↛ Router Admin</td><td class="fail">BLOCKED</td><td>06_test_guest_admin_block.yml</td></tr>
+                <tr><td>T7</td><td>Nmap từ WAN</td><td class="pass">All filtered</td><td>07_test_nmap_wan.yml</td></tr>
+                <tr><td>T8</td><td>Nmap từ GUEST → LAN</td><td class="pass">All filtered</td><td>08_test_nmap_guest.yml</td></tr>
+              </table>
+            </div>
+
+            <div class="test-card security-critical">
+              <h2>⚠️ Lưu ý quan trọng</h2>
+              <ul>
+                <li>Test T4 và T5 là <strong>critical security tests</strong> - FAIL = lỗ hổng bảo mật</li>
+                <li>Kết quả nmap "filtered" = DROP (tốt), "closed" = REJECT (chấp nhận được), "open" = cần điều tra</li>
+                <li>Chạy lại <code>ansible-playbook -i inventory/hosts.ini playbooks/site.yml</code> sau mỗi thay đổi cấu hình</li>
+              </ul>
+            </div>
+
+            <p><em>Generated by Ansible | NT131.Q22 Nhóm 18 Firewall Test Suite</em></p>
+          </body>
+          </html>
+        dest: "./test-results/report.html"
+
+    - name: "Hiển thị thông báo hoàn thành"
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════╗
+          ║     HOÀN THÀNH TOÀN BỘ KIỂM THỬ FIREWALL        ║
+          ║     Nhóm 18 - NT131.Q22 - OpenWRT FW4            ║
+          ╠══════════════════════════════════════════════════╣
+          ║  📁 Kết quả: ./test-results/                     ║
+          ║  📊 Báo cáo: ./test-results/report.html          ║
+          ║  📝 Logs:   /tmp/firewall-test-results/ (hosts)  ║
+          ╚══════════════════════════════════════════════════╝

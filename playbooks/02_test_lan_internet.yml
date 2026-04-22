@@ -1,0 +1,100 @@
+---
+# ============================================================
+# playbooks/02_test_lan_internet.yml
+# Kiểm tra thiết bị trong LAN có thể truy cập Internet qua NAT
+# Kết quả mong đợi: PASS (LAN được phép ra Internet)
+# ============================================================
+
+- name: "TEST 2 - LAN Internet Access via NAT"
+  hosts: lan_hosts
+  gather_facts: yes
+  vars:
+    test_name: "lan_internet"
+
+  tasks:
+    - name: "[T2.1] Ping Google DNS (8.8.8.8) từ LAN"
+      command: ping -c 4 -W 3 8.8.8.8
+      register: ping_google_dns
+      ignore_errors: yes
+
+    - name: "[T2.2] Ping Cloudflare DNS (1.1.1.1) từ LAN"
+      command: ping -c 4 -W 3 1.1.1.1
+      register: ping_cloudflare
+      ignore_errors: yes
+
+    - name: "[T2.3] Ping google.com (kiểm tra DNS hoạt động)"
+      command: ping -c 4 -W 5 google.com
+      register: ping_google_domain
+      ignore_errors: yes
+
+    - name: "[T2.4] HTTP GET tới example.com"
+      command: curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 http://example.com
+      register: http_result
+      ignore_errors: yes
+
+    - name: "[T2.5] Traceroute ra Internet (xem NAT qua router)"
+      command: traceroute -n -m 5 8.8.8.8
+      register: traceroute_result
+      ignore_errors: yes
+
+    - name: "[T2.6] Kiểm tra DNS resolution từ LAN"
+      command: nslookup google.com 8.8.8.8
+      register: dns_result
+      ignore_errors: yes
+
+    - name: "ASSERT - LAN phải ping được 8.8.8.8"
+      assert:
+        that:
+          - ping_google_dns.rc == 0
+        fail_msg: "❌ FAIL T2.1: LAN không ping được 8.8.8.8 - NAT có thể bị lỗi!"
+        success_msg: "✅ PASS T2.1: LAN ping được 8.8.8.8"
+
+    - name: "ASSERT - LAN phải ping được 1.1.1.1"
+      assert:
+        that:
+          - ping_cloudflare.rc == 0
+        fail_msg: "❌ FAIL T2.2: LAN không ping được 1.1.1.1"
+        success_msg: "✅ PASS T2.2: LAN ping được 1.1.1.1"
+
+    - name: "ASSERT - HTTP phải trả về code 200"
+      assert:
+        that:
+          - http_result.stdout == "200"
+        fail_msg: "❌ FAIL T2.4: HTTP từ LAN thất bại (code={{ http_result.stdout }})"
+        success_msg: "✅ PASS T2.4: HTTP từ LAN OK (code=200)"
+      when: http_result.rc is defined
+
+    - name: "Lưu kết quả T2"
+      copy:
+        content: |
+          ========================================
+          TEST 2: LAN Internet Access (NAT)
+          Host: {{ inventory_hostname }} - {{ ansible_default_ipv4.address }}
+          ========================================
+
+          [T2.1] Ping 8.8.8.8:    {{ 'PASS ✅' if ping_google_dns.rc == 0 else 'FAIL ❌' }}
+          {{ ping_google_dns.stdout | default('') }}
+
+          [T2.2] Ping 1.1.1.1:    {{ 'PASS ✅' if ping_cloudflare.rc == 0 else 'FAIL ❌' }}
+
+          [T2.3] Ping google.com:  {{ 'PASS ✅' if ping_google_domain.rc == 0 else 'FAIL ❌' }}
+
+          [T2.4] HTTP example.com: {{ 'PASS ✅' if http_result.stdout == '200' else 'FAIL ❌' }} (HTTP {{ http_result.stdout | default('N/A') }})
+
+          [T2.5] Traceroute:
+          {{ traceroute_result.stdout | default('N/A') }}
+
+          [T2.6] DNS Resolution:
+          {{ dns_result.stdout | default('N/A') }}
+
+          KẾT LUẬN: LAN truy cập Internet = {{ 'OK ✅' if ping_google_dns.rc == 0 else 'FAIL ❌' }}
+        dest: "{{ results_dir }}/02_lan_internet.txt"
+
+    - name: "Hiển thị tóm tắt kết quả T2"
+      debug:
+        msg: |
+          ===== TEST 2: LAN → Internet =====
+          🌐 Ping 8.8.8.8:    {{ '✅ PASS' if ping_google_dns.rc == 0 else '❌ FAIL' }}
+          🌐 Ping 1.1.1.1:    {{ '✅ PASS' if ping_cloudflare.rc == 0 else '❌ FAIL' }}
+          🌐 Ping google.com: {{ '✅ PASS' if ping_google_domain.rc == 0 else '❌ FAIL' }}
+          🌐 HTTP 200:        {{ '✅ PASS' if http_result.stdout == '200' else '❌ FAIL' }}

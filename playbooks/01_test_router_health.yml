@@ -1,0 +1,124 @@
+---
+# ============================================================
+# playbooks/01_test_router_health.yml
+# Kiểm tra router OpenWRT hoạt động, interfaces up, DHCP hoạt động
+# ============================================================
+
+- name: "TEST 1 - Router Health Check"
+  hosts: router
+  gather_facts: no
+  vars:
+    test_name: "router_health"
+
+  tasks:
+    - name: "[T1.1] Kết nối SSH vào router OpenWRT"
+      ping:
+      register: ssh_result
+
+    - name: "[T1.2] Kiểm tra uptime router"
+      command: uptime
+      register: uptime_result
+
+    - name: "[T1.3] Kiểm tra các interface mạng"
+      command: ip addr show
+      register: interfaces_result
+
+    - name: "[T1.4] Kiểm tra interface eth0 (WAN) UP"
+      command: ip link show eth0
+      register: eth0_status
+
+    - name: "[T1.5] Kiểm tra interface eth1 (LAN) UP"
+      command: ip link show eth1
+      register: eth1_status
+
+    - name: "[T1.6] Kiểm tra interface eth2 (GUEST) UP"
+      command: ip link show eth2
+      register: eth2_status
+
+    - name: "[T1.7] Kiểm tra DHCP server cho LAN"
+      command: ps aux
+      register: processes_result
+
+    - name: "[T1.8] Kiểm tra bảng định tuyến"
+      command: ip route show
+      register: route_result
+
+    - name: "[T1.9] Kiểm tra firewall fw4 (nftables) đang chạy"
+      command: nft list ruleset
+      register: nft_result
+      ignore_errors: yes
+
+    - name: "[T1.10] Kiểm tra zones firewall"
+      command: fw4 show
+      register: fw4_zones
+      ignore_errors: yes
+
+    - name: "Lưu kết quả T1 vào file"
+      copy:
+        content: |
+          ========================================
+          TEST 1: Router Health Check
+          Thời gian: {{ ansible_date_time.iso8601 | default('N/A') }}
+          ========================================
+
+          [T1.1] SSH Connection: {{ 'PASS' if ssh_result is success else 'FAIL' }}
+
+          [T1.2] Uptime:
+          {{ uptime_result.stdout | default('N/A') }}
+
+          [T1.3] Network Interfaces:
+          {{ interfaces_result.stdout | default('N/A') }}
+
+          [T1.8] Routing Table:
+          {{ route_result.stdout | default('N/A') }}
+
+          [T1.9] NFTables Ruleset:
+          {{ nft_result.stdout | default('không lấy được') }}
+
+          [T1.10] FW4 Zones:
+          {{ fw4_zones.stdout | default('không lấy được') }}
+        dest: "{{ results_dir }}/01_router_health.txt"
+
+    - name: "Hiển thị kết quả interfaces"
+      debug:
+        msg: |
+          ✅ SSH vào router: OK
+          📋 Uptime: {{ uptime_result.stdout }}
+          🛣️  Routes: {{ route_result.stdout_lines | length }} dòng
+          🔥 NFTables: {{ 'Đang chạy' if nft_result.rc == 0 else 'Lỗi' }}
+
+- name: "TEST 1B - Kiểm tra DHCP cấp IP từ LAN host"
+  hosts: lan_hosts
+  gather_facts: yes
+  tasks:
+    - name: "[T1B.1] Kiểm tra IP trong dải LAN 192.168.1.x"
+      assert:
+        that:
+          - ansible_default_ipv4.address is match('192\\.168\\.1\\.')
+        fail_msg: "❌ FAIL: Host LAN không có IP trong dải 192.168.1.0/24"
+        success_msg: "✅ PASS: Host LAN có IP {{ ansible_default_ipv4.address }}"
+
+    - name: "[T1B.2] Kiểm tra default gateway là 192.168.1.1"
+      assert:
+        that:
+          - ansible_default_ipv4.gateway == '192.168.1.1'
+        fail_msg: "❌ FAIL: Gateway của LAN không phải 192.168.1.1"
+        success_msg: "✅ PASS: Default gateway đúng = {{ ansible_default_ipv4.gateway }}"
+
+- name: "TEST 1C - Kiểm tra DHCP cấp IP từ GUEST host"
+  hosts: guest_hosts
+  gather_facts: yes
+  tasks:
+    - name: "[T1C.1] Kiểm tra IP trong dải GUEST 192.168.2.x"
+      assert:
+        that:
+          - ansible_default_ipv4.address is match('192\\.168\\.2\\.')
+        fail_msg: "❌ FAIL: Host GUEST không có IP trong dải 192.168.2.0/24"
+        success_msg: "✅ PASS: Host GUEST có IP {{ ansible_default_ipv4.address }}"
+
+    - name: "[T1C.2] Kiểm tra default gateway của GUEST là 192.168.2.1"
+      assert:
+        that:
+          - ansible_default_ipv4.gateway == '192.168.2.1'
+        fail_msg: "❌ FAIL: Gateway của GUEST không phải 192.168.2.1"
+        success_msg: "✅ PASS: Default gateway đúng = {{ ansible_default_ipv4.gateway }}"

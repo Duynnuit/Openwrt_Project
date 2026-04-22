@@ -1,0 +1,38 @@
+# ============================================================
+# group_vars/all.yml - Biến dùng chung cho toàn bộ test
+# ============================================================
+
+# Thông tin router OpenWRT
+router:
+  lan_ip: "192.168.1.1"
+  guest_ip: "192.168.2.1"
+  ssh_port: 22
+  http_port: 80
+  luci_port: 80
+
+# Dải mạng từng zone
+networks:
+  lan: "192.168.1.0/24"
+  guest: "192.168.2.0/24"
+
+# Các cổng cần kiểm thử bảo vệ quản trị
+admin_ports:
+  - { port: 22, name: "SSH" }
+  - { port: 80, name: "HTTP/LuCI" }
+  - { port: 443, name: "HTTPS" }
+
+# Timeout kết nối (giây)
+connect_timeout: 5
+
+# Thư mục lưu kết quả test
+results_dir: "/tmp/firewall-test-results"
+
+# DNS để test kết nối Internet
+public_dns:
+  - "8.8.8.8"
+  - "1.1.1.1"
+
+# Test domains
+test_domains:
+  - "google.com"
+  - "example.com"

@@ -1,0 +1,107 @@
+---
+# ============================================================
+# playbooks/05_test_wan_admin_block.yml
+# Block-WAN-SSH (port 22) và Block-WAN-HTTP (port 80) từ WAN
+# Kết quả mong đợi: SSH và HTTP từ WAN bị DROP
+# ============================================================
+
+- name: "TEST 5 - WAN Admin Port Protection (Block-WAN-SSH, Block-WAN-HTTP)"
+  hosts: wan_hosts
+  gather_facts: yes
+  ignore_unreachable: yes
+
+  vars:
+    router_wan_ip: "{{ hostvars['openwrt']['ansible_host'] | default('192.168.1.1') }}"
+    # IP WAN của router (thường do VMware NAT cấp, ví dụ 192.168.0.x hoặc 10.0.x.x)
+    # Chỉnh lại cho đúng IP WAN của router trong lab của bạn
+    router_wan_actual_ip: "10.0.0.1"   # <-- Thay IP WAN thực của router
+
+  tasks:
+    - name: "[T5.1] Thử SSH vào router từ WAN (port 22) - PHẢI BỊ DROP"
+      command: "nc -zv -w 5 {{ router_wan_actual_ip }} 22"
+      register: ssh_wan
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - WAN KHÔNG được SSH vào router"
+      assert:
+        that:
+          - ssh_wan.rc != 0
+        fail_msg: |
+          ❌ SECURITY FAIL T5.1: SSH từ WAN vào router THÀNH CÔNG!
+          Rule 'Block-WAN-SSH' CHƯA HOẠT ĐỘNG!
+        success_msg: "✅ PASS T5.1: SSH từ WAN bị DROP (Block-WAN-SSH hoạt động)"
+
+    - name: "[T5.2] Thử HTTP vào router từ WAN (port 80/LuCI) - PHẢI BỊ DROP"
+      command: "curl -s --connect-timeout 5 http://{{ router_wan_actual_ip }}"
+      register: http_wan
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "ASSERT - WAN KHÔNG được HTTP vào LuCI"
+      assert:
+        that:
+          - http_wan.rc != 0
+        fail_msg: |
+          ❌ SECURITY FAIL T5.2: HTTP từ WAN vào LuCI thành công!
+          Rule 'Block-WAN-HTTP' CHƯA HOẠT ĐỘNG!
+        success_msg: "✅ PASS T5.2: HTTP từ WAN bị DROP (Block-WAN-HTTP hoạt động)"
+
+    - name: "[T5.3] Thử HTTPS vào router từ WAN (port 443)"
+      command: "nc -zv -w 5 {{ router_wan_actual_ip }} 443"
+      register: https_wan
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "[T5.4] Thử telnet vào router từ WAN (port 23)"
+      command: "nc -zv -w 5 {{ router_wan_actual_ip }} 23"
+      register: telnet_wan
+      ignore_errors: yes
+      failed_when: false
+
+    - name: "[T5.5] Nmap scan router từ WAN"
+      command: "nmap -n -sV -T4 -p 22,23,80,443,8080 {{ router_wan_actual_ip }} --host-timeout 30s"
+      register: nmap_wan_router
+      ignore_errors: yes
+
+    - name: "Lưu kết quả T5"
+      copy:
+        content: |
+          ========================================
+          TEST 5: WAN Admin Port Protection
+          Nguồn: WAN ({{ inventory_hostname }})
+          Đích: Router WAN IP {{ router_wan_actual_ip }}
+          ========================================
+
+          Rules kiểm tra:
+          - Block-WAN-SSH:  WAN → Router port 22 → DROP
+          - Block-WAN-HTTP: WAN → Router port 80 → DROP
+
+          [T5.1] SSH (port 22) từ WAN:
+                 → {{ 'BLOCKED ✅ (DROP - Đúng)' if ssh_wan.rc != 0 else 'OPEN ❌ (Security Fail!)' }}
+
+          [T5.2] HTTP (port 80) từ WAN:
+                 → {{ 'BLOCKED ✅ (DROP - Đúng)' if http_wan.rc != 0 else 'OPEN ❌ (Security Fail!)' }}
+
+          [T5.3] HTTPS (port 443) từ WAN:
+                 → {{ 'BLOCKED ✅' if https_wan.rc != 0 else 'OPEN ❌' }}
+
+          [T5.4] Telnet (port 23) từ WAN:
+                 → {{ 'BLOCKED ✅' if telnet_wan.rc != 0 else 'OPEN ❌' }}
+
+          [T5.5] Nmap Scan từ WAN:
+          {{ nmap_wan_router.stdout | default('N/A') }}
+
+          ========================================
+          KẾT LUẬN: WAN Admin Protection = {{ 'ĐẠT ✅' if (ssh_wan.rc != 0 and http_wan.rc != 0) else 'KHÔNG ĐẠT ❌' }}
+          ========================================
+        dest: "{{ results_dir }}/05_wan_admin_block.txt"
+
+    - name: "Hiển thị tóm tắt T5"
+      debug:
+        msg: |
+          ===== TEST 5: WAN → Router Admin Protection =====
+          🛡️ SSH (22) từ WAN:   {{ '✅ BLOCKED (OK)' if ssh_wan.rc != 0 else '❌ OPEN (Security Fail!)' }}
+          🛡️ HTTP (80) từ WAN:  {{ '✅ BLOCKED (OK)' if http_wan.rc != 0 else '❌ OPEN (Security Fail!)' }}
+          🛡️ HTTPS (443) WAN:   {{ '✅ BLOCKED (OK)' if https_wan.rc != 0 else '❌ OPEN' }}
+          📌 Rules: Block-WAN-SSH, Block-WAN-HTTP
