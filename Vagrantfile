@@ -6,26 +6,6 @@ Vagrant.configure("2") do |config|
     v.gui = false
   end
 
-  # 1. Router OpenWRT (Soft-Router
-  config.vm.define "openwrt" do |router|
-    router.vm.box = "generic/openwrt"
-    router.vm.hostname = "OpenWrt"
-
-    # eth0 mặc định là NAT (ra Internet qua host)
-    
-    # eth1: Vùng LAN (Vagrant tự động map các IP cùng dải vào chung một VMnet ẩn)
-    router.vm.network "private_network", ip: "192.168.1.1"
-
-    # eth2: Vùng GUEST
-    router.vm.network "private_network", ip: "192.168.2.1"
-
-    router.vm.provider "vmware_desktop" do |v|
-      v.vmx["displayname"] = "OpenWRT_Router_Nhom18"
-      v.vmx["memsize"] = "512"
-      v.vmx["numvcpus"] = "1"
-    end
-  end
-
 
   # 2. Vùng LAN - Ubuntu 20.04
 
