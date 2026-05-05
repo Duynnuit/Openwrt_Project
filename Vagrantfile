@@ -1,6 +1,3 @@
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
-
 Vagrant.configure("2") do |config|
   config.vm.provider "vmware_desktop" do |v|
     v.gui = false
@@ -21,12 +18,21 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "1"
     end
 
+<<<<<<< HEAD
     lan.vm.provision "shell", inline: <<-SHELL
       sudo apt-get -o Acquire::ForceIPv4=true update || true
       sudo apt-get -o Acquire::ForceIPv4=true install -y python3 || true
 
       sudo ip route del default || true
       sudo ip route add default via 192.168.10.1 dev eth1 || true
+=======
+    # Ép dùng IPv4, cài Python3 trước, sau đó mới trỏ Gateway về OpenWRT
+    lan.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3
+      sudo ip route del default
+      sudo ip route add default via 192.168.1.1
+>>>>>>> 72da1c2623af94abb5847dc966e3e8ace1abb443
     SHELL
   end
 
@@ -45,6 +51,7 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "1"
     end
 
+<<<<<<< HEAD
     guest.vm.provision "shell", inline: <<-SHELL
       sudo apt-get -o Acquire::ForceIPv4=true update || true
       sudo apt-get -o Acquire::ForceIPv4=true install -y python3 || true
@@ -55,6 +62,19 @@ Vagrant.configure("2") do |config|
   end
 
   # 3. Máy ảo WAN Attacker - Ubuntu 20.04
+=======
+    # Ép dùng IPv4, cài Python3 trước, sau đó mới trỏ Gateway về OpenWRT
+    guest.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3
+      sudo ip route del default
+      sudo ip route add default via 192.168.2.1
+    SHELL
+  end
+
+
+  # 4. Máy ảo WAN Attacker - Ubuntu 20.04
+>>>>>>> 72da1c2623af94abb5847dc966e3e8ace1abb443
   config.vm.define "wan-attacker" do |wan|
     wan.vm.box = "bento/ubuntu-20.04"
     wan.vm.hostname = "wan-attacker"
@@ -68,10 +88,18 @@ Vagrant.configure("2") do |config|
       v.vmx["memsize"] = "1024"
       v.vmx["numvcpus"] = "1"
     end
+<<<<<<< HEAD
 
     wan.vm.provision "shell", inline: <<-SHELL
       sudo apt-get -o Acquire::ForceIPv4=true update || true
       sudo apt-get -o Acquire::ForceIPv4=true install -y python3 nmap curl netcat-openbsd || true
+=======
+    
+    # Ép dùng IPv4, Cài Python3 và nmap để test
+    wan.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3 nmap
+>>>>>>> 72da1c2623af94abb5847dc966e3e8ace1abb443
     SHELL
   end
 
