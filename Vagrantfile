@@ -1,6 +1,3 @@
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
-
 Vagrant.configure("2") do |config|
   config.vm.provider "vmware_desktop" do |v|
     v.gui = false
@@ -21,11 +18,12 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "1"
     end
 
-    # Trỏ Gateway về OpenWRT và cài Python3 cho Ansible
+    # Ép dùng IPv4, cài Python3 trước, sau đó mới trỏ Gateway về OpenWRT
     lan.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3
       sudo ip route del default
       sudo ip route add default via 192.168.1.1
-      sudo apt-get update && sudo apt-get install -y python3
     SHELL
   end
 
@@ -43,13 +41,15 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "1"
     end
 
-    # Trỏ Gateway về OpenWRT và cài Python3
+    # Ép dùng IPv4, cài Python3 trước, sau đó mới trỏ Gateway về OpenWRT
     guest.vm.provision "shell", inline: <<-SHELL
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3
       sudo ip route del default
       sudo ip route add default via 192.168.2.1
-      sudo apt-get update && sudo apt-get install -y python3
     SHELL
   end
+
 
   # 4. Máy ảo WAN Attacker - Ubuntu 20.04
   config.vm.define "wan-attacker" do |wan|
@@ -65,9 +65,10 @@ Vagrant.configure("2") do |config|
       v.vmx["numvcpus"] = "1"
     end
     
-    # Cài Python3 và nmap để test
+    # Ép dùng IPv4, Cài Python3 và nmap để test
     wan.vm.provision "shell", inline: <<-SHELL
-      sudo apt-get update && sudo apt-get install -y python3 nmap
+      sudo apt-get -o Acquire::ForceIPv4=true update
+      sudo apt-get -o Acquire::ForceIPv4=true install -y python3 nmap
     SHELL
   end
 
