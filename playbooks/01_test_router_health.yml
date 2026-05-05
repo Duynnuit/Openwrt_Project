@@ -36,7 +36,7 @@
       register: eth2_status
 
     - name: "[T1.7] Kiểm tra DHCP server cho LAN"
-      command: ps aux
+      command: ps w
       register: processes_result
 
     - name: "[T1.8] Kiểm tra bảng định tuyến"
@@ -91,18 +91,18 @@
   hosts: lan_hosts
   gather_facts: yes
   tasks:
-    - name: "[T1B.1] Kiểm tra IP trong dải LAN 192.168.1.x"
+    - name: "[T1B.1] Kiểm tra IP trong dải LAN 192.168.10.x"
       assert:
         that:
-          - ansible_default_ipv4.address is match('192\\.168\\.1\\.')
-        fail_msg: "❌ FAIL: Host LAN không có IP trong dải 192.168.1.0/24"
+          - ansible_default_ipv4.address is match('192\\.168\\.10\\.')
+        fail_msg: "❌ FAIL: Host LAN không có IP trong dải 192.168.10.0/24"
         success_msg: "✅ PASS: Host LAN có IP {{ ansible_default_ipv4.address }}"
 
-    - name: "[T1B.2] Kiểm tra default gateway là 192.168.1.1"
+    - name: "[T1B.2] Kiểm tra default gateway là 192.168.10.1"
       assert:
         that:
-          - ansible_default_ipv4.gateway == '192.168.1.1'
-        fail_msg: "❌ FAIL: Gateway của LAN không phải 192.168.1.1"
+          - ansible_default_ipv4.gateway == '192.168.10.1'
+        fail_msg: "❌ FAIL: Gateway của LAN không phải 192.168.10.1"
         success_msg: "✅ PASS: Default gateway đúng = {{ ansible_default_ipv4.gateway }}"
 
 - name: "TEST 1C - Kiểm tra DHCP cấp IP từ GUEST host"

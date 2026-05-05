@@ -7,6 +7,8 @@
   hosts: lan_hosts
   become: yes
   gather_facts: yes
+  vars:
+    results_dir: "/tmp/firewall-test-results"
   tasks:
     - name: Cập nhật apt cache
       apt:
@@ -32,12 +34,14 @@
       file:
         path: "{{ results_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0777'
 
 - name: "Setup - Cài đặt công cụ kiểm thử trên GUEST hosts"
   hosts: guest_hosts
   become: yes
   gather_facts: yes
+  vars:
+    results_dir: "/tmp/firewall-test-results"
   tasks:
     - name: Cập nhật apt cache
       apt:
@@ -61,12 +65,14 @@
       file:
         path: "{{ results_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0777'
 
 - name: "Setup - Kiểm tra công cụ trên WAN hosts"
   hosts: wan_hosts
   become: yes
   gather_facts: yes
+  vars:
+    results_dir: "/tmp/firewall-test-results"
   ignore_unreachable: yes
   tasks:
     - name: Cài đặt công cụ tấn công mô phỏng
@@ -82,4 +88,4 @@
       file:
         path: "{{ results_dir }}"
         state: directory
-        mode: '0755'
+        mode: '0777'

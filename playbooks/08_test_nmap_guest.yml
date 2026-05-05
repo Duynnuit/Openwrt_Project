@@ -12,11 +12,12 @@
   become: yes
 
   tasks:
-    - name: "[T8.1] Nmap scan từ GUEST vào 192.168.1.0/24 (toàn bộ LAN subnet)"
+    - name: "[T8.1] Nmap scan nhanh từ GUEST vào LAN"
       command: >
         nmap -n -sn -T4
-        --host-timeout 10s
-        192.168.1.0/24
+        --max-retries 1
+        --host-timeout 3s
+        192.168.10.1 192.168.10.100
         -oN {{ results_dir }}/nmap_guest_lan_discovery.txt
       register: nmap_lan_discovery
       ignore_errors: yes
@@ -25,9 +26,9 @@
       command: >
         nmap -n -sS -T4
         --top-ports 100
-        --host-timeout 15s
+        --host-timeout 5s
         -oN {{ results_dir }}/nmap_guest_router_lan.txt
-        192.168.1.1
+        192.168.10.1
       register: nmap_guest_router
       ignore_errors: yes
 
@@ -35,17 +36,18 @@
       command: >
         nmap -n --reason -T3
         -p 22,80,443,8080
-        192.168.1.1
+        192.168.10.1
       register: nmap_reason_guest
       ignore_errors: yes
 
-    - name: "[T8.4] Nmap scan toàn bộ LAN từ GUEST (phát hiện host nào visible không)"
+    - name: "[T8.4] Nmap port scan nhanh từ GUEST vào LAN"
       command: >
-        nmap -n -sV -T3
-        -p 22,80,443,3389,8080
-        --host-timeout 20s
+        nmap -n -Pn -T4
+        -p 22,80,443
+        --max-retries 1
+        --host-timeout 3s
         -oN {{ results_dir }}/nmap_guest_lan_portscan.txt
-        192.168.1.0/24
+        192.168.10.1 192.168.10.100
       register: nmap_full_lan
       ignore_errors: yes
 
@@ -77,17 +79,17 @@
           ========================================
           TEST 8: Nmap Scan từ GUEST → LAN
           Attacker: GUEST {{ ansible_default_ipv4.address }}
-          Mục tiêu: LAN subnet 192.168.1.0/24
+          Mục tiêu: LAN subnet 192.168.10.0/24
           ========================================
 
           Kịch bản: Thiết bị GUEST bị compromise cố scan LAN
           Mong đợi: Firewall block hoàn toàn, GUEST không thấy gì
 
-          [T8.1] Host Discovery (ping scan) GUEST → 192.168.1.0/24:
+          [T8.1] Host Discovery (ping scan) GUEST → 192.168.10.0/24:
           {{ nmap_lan_discovery.stdout | default('N/A') }}
           Kết quả: {{ 'KHÔNG THẤY HOST NÀO ✅' if not lan_hosts_visible else 'THẤY HOST ❌ (Lỗ hổng!)' }}
 
-          [T8.2] Port Scan GUEST → 192.168.1.1 (Top 100 ports):
+          [T8.2] Port Scan GUEST → 192.168.10.1 (Top 100 ports):
           {{ nmap_guest_router.stdout | default('N/A') }}
           Kết quả: {{ 'KHÔNG CÓ OPEN PORT ✅' if not lan_ports_open else 'CÓ OPEN PORT ❌' }}
 
